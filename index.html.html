@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secure canvas cross-site test</title>
+<style>
+  body { font-family: sans-serif; background: #17191C; color: #F5F0E7; margin: 0; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .site { color: #F28A2E; font-size: 22px; font-weight: bold; margin: 8px 0 16px; }
+  .hash { font-family: monospace; font-size: 20px; background: #202226; padding: 12px; border-radius: 10px; word-break: break-all; }
+  .note { color: #A9A398; font-size: 13px; line-height: 1.5; margin-top: 16px; }
+  canvas { margin-top: 16px; border: 1px solid #33363C; max-width: 100%; }
+</style>
+</head>
+<body>
+<h1>Canvas cross-site test</h1>
+<div>This page is being read as site:</div>
+<div class="site" id="site"></div>
+<div>Canvas signature (3 draws on this page):</div>
+<div class="hash" id="hash">calculating…</div>
+<canvas id="c" width="280" height="80"></canvas>
+<div class="note">
+  Same drawing code on every site. No web fonts or emoji, so there is one rendering path.<br>
+  Expected with fingerprinting protection: the signature stays the same on reload, differs between
+  <b>localhost</b> and <b>127.0.0.1</b>, and changes after the browser is restarted.
+</div>
+<script>
+  // Fixed drawing: shapes, gradients, blending and system-font text only.
+  function draw(canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const g = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    g.addColorStop(0, "#ffb347"); g.addColorStop(1, "#7c4ddb");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "multiply";
+    [["#f2f", 60, 40], ["#2ff", 110, 40], ["#ff2", 85, 25]].forEach(([c, x, y]) => {
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, 28, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#17191C";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Secure canvas test 0123", 130, 50);
+    return canvas.toDataURL("image/png");
+  }
+
+  // Small non-cryptographic hash (cyrb53); fine for comparing outputs.
+  function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).toUpperCase().padStart(14, "0");
+  }
+
+  document.getElementById("site").textContent = location.host;
+  const canvas = document.getElementById("c");
+  const results = [draw(canvas), draw(canvas), draw(canvas)].map(hash);
+  const same = results.every((r) => r === results[0]);
+  document.getElementById("hash").textContent =
+    same ? results[0] : results.join("\n") + "\n(differs within the page)";
+</script>
+</body>
+</html>
